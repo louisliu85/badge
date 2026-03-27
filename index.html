@@ -1,0 +1,443 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.7">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">import React, { useState, useRef, useEffect } from 'react';</p>
+<p class="p1">import { User, Plus, Image as ImageIcon, X, Check, Search, Upload, RefreshCw, Save, Trash2, Loader2, Settings, Lock, Unlock } from 'lucide-react';</p>
+<p class="p1">import { initializeApp } from 'firebase/app';</p>
+<p class="p1">import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';</p>
+<p class="p1">import { getFirestore, collection, doc, setDoc, onSnapshot, query, deleteDoc } from 'firebase/firestore';</p>
+<p class="p2"><br></p>
+<p class="p1">// ==========================================</p>
+<p class="p1">// 1. Firebase 配置與初始化</p>
+<p class="p1">// ==========================================</p>
+<p class="p1">const firebaseConfig = JSON.parse(__firebase_config);</p>
+<p class="p1">const app = initializeApp(firebaseConfig);</p>
+<p class="p1">const auth = getAuth(app);</p>
+<p class="p1">const db = getFirestore(app);</p>
+<p class="p2"><br></p>
+<p class="p1">// 關鍵修正：使用系統配發的 ID 以確保符合安全規則。</p>
+<p class="p1">// 只要您在不同裝置開啟同一個專案，appId 就會保持一致，實現雲端同步。</p>
+<p class="p1">const appId = typeof __app_id !== 'undefined' ? __app_id : 'decathlon-tag-generator-default';<span class="Apple-converted-space"> </span></p>
+<p class="p2"><br></p>
+<p class="p1">// 管理員密碼設定</p>
+<p class="p1">const ADMIN_PASSWORD = "1204@1769";</p>
+<p class="p2"><br></p>
+<p class="p1">// 預設配置</p>
+<p class="p1">const FALLBACK_LOGO = "https://upload.wikimedia.org/wikipedia/commons/b/bc/Decathlon_-_logo_%28France%2C_2024%29.svg";</p>
+<p class="p1">const DEFAULT_ICONS = [</p>
+<p class="p1"><span class="Apple-converted-space">  </span>{ id: 'default_running', name: '無', url: '' },</p>
+<p class="p1">];</p>
+<p class="p1">const FIXED_SLOGAN = "你的滿意，我們在意";</p>
+<p class="p2"><br></p>
+<p class="p1">const App = () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// --- 狀態管理 ---</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [user, setUser] = useState(null);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [name, setName] = useState('Louis');</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [logoUrl, setLogoUrl] = useState(FALLBACK_LOGO);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [sportIconL, setSportIconL] = useState('');</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [sportIconR, setSportIconR] = useState('');</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [isGenerating, setIsGenerating] = useState(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [libsLoaded, setLibsLoaded] = useState(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [showSelector, setShowSelector] = useState(null);<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [searchTerm, setSearchTerm] = useState('');</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [cloudIcons, setCloudIcons] = useState([]);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [isSaving, setIsSaving] = useState(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [isLogoSaving, setIsLogoSaving] = useState(false);</p>
+<p class="p2"><span class="Apple-converted-space">  </span></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// 管理選單與權限狀態</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [showSettings, setShowSettings] = useState(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [isUnlocked, setIsUnlocked] = useState(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [passwordInput, setPasswordInput] = useState('');</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [passwordError, setPasswordError] = useState(false);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const cardRef = useRef(null);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const iconFileInputRef = useRef(null);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const logoFileInputRef = useRef(null);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// --- 認證與初始載入 (符合 Rule 3: 必須先處理認證) ---</p>
+<p class="p1"><span class="Apple-converted-space">  </span>useEffect(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const loadScript = (url) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>return new Promise((resolve) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const script = document.createElement('script');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>script.src = url;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>script.onload = resolve;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.head.appendChild(script);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>Promise.all([</p>
+<p class="p1"><span class="Apple-converted-space">      </span>loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),</p>
+<p class="p1"><span class="Apple-converted-space">      </span>loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')</p>
+<p class="p1"><span class="Apple-converted-space">    </span>]).then(() =&gt; setLibsLoaded(true));</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>const initAuth = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (typeof __initial_auth_token !== 'undefined' &amp;&amp; __initial_auth_token) {</p>
+<p class="p1"><span class="Apple-converted-space">          </span>await signInWithCustomToken(auth, __initial_auth_token);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">          </span>await signInAnonymously(auth);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} catch (err) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>console.error("Auth Error:", err);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p1"><span class="Apple-converted-space">    </span>initAuth();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const unsubscribe = onAuthStateChanged(auth, setUser);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return () =&gt; unsubscribe();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}, []);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// --- Firestore 資料同步 (符合 Rule 1 &amp; 2) ---</p>
+<p class="p1"><span class="Apple-converted-space">  </span>useEffect(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (!user) return;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// A. 監聽雲端圖示</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const iconsCol = collection(db, 'artifacts', appId, 'public', 'data', 'sport_icons');</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const unsubscribeIcons = onSnapshot(iconsCol, (snapshot) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const icons = snapshot.docs.map(doc =&gt; ({ id: doc.id, ...doc.data() }));</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setCloudIcons(icons);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}, (error) =&gt; console.error("Icons Fetch Error:", error));</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// B. 監聽 Logo</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'branding', 'logo');</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const unsubscribeLogo = onSnapshot(logoDocRef, (docSnap) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if (docSnap.exists() &amp;&amp; docSnap.data().url) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setLogoUrl(docSnap.data().url);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setLogoUrl(FALLBACK_LOGO);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}, (error) =&gt; console.error("Logo Fetch Error:", error));</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>return () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>unsubscribeIcons();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>unsubscribeLogo();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}, [user]);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// --- 核心邏輯 ---</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const getNameFontSize = (text) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const maxFontSize = 40;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const minFontSize = 25;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const threshold = 5;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (!text || text.length &lt;= threshold) return maxFontSize;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const scaledSize = (threshold / text.length) * maxFontSize;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return Math.max(minFontSize, scaledSize);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const dynamicFontSize = getNameFontSize(name);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const hasDescenderLetters = /[gjypq]/i.test(name);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// 密碼驗證</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const handleUnlock = () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (passwordInput === ADMIN_PASSWORD) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setIsUnlocked(true);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setPasswordError(false);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setPasswordInput('');</p>
+<p class="p1"><span class="Apple-converted-space">    </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setPasswordError(true);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setTimeout(() =&gt; setPasswordError(false), 2000);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Logo 上傳</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const handleLogoUpload = async (e) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const file = e.target.files[0];</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (!file || !user) return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>setIsLogoSaving(true);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const reader = new FileReader();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>reader.onloadend = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'branding', 'logo');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>await setDoc(logoDocRef, { url: reader.result, updatedAt: Date.now() });</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} catch (err) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>console.error("Logo 上傳失敗:", err);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} finally {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setIsLogoSaving(false);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p1"><span class="Apple-converted-space">    </span>reader.readAsDataURL(file);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// 運動圖示上傳</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const handleCloudIconUpload = async (e) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const file = e.target.files[0];</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (!file || !user) return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>setIsSaving(true);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const fileName = file.name.split('.').slice(0, -1).join('.') || "未命名圖示";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const reader = new FileReader();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>reader.onloadend = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const newIconId = crypto.randomUUID();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const iconDoc = doc(db, 'artifacts', appId, 'public', 'data', 'sport_icons', newIconId);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>await setDoc(iconDoc, { name: fileName, url: reader.result, createdAt: Date.now() });</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} catch (err) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>console.error("圖示上傳失敗:", err);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} finally {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setIsSaving(false);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (iconFileInputRef.current) iconFileInputRef.current.value = "";</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p1"><span class="Apple-converted-space">    </span>reader.readAsDataURL(file);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const deleteIcon = async (e, id) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>e.stopPropagation();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (!user || !isUnlocked) return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sport_icons', id));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>} catch (err) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>console.error("刪除失敗:", err);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const downloadPDF = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if (!cardRef.current || !libsLoaded) return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>setIsGenerating(true);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>await new Promise(resolve =&gt; setTimeout(resolve, 500));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const canvas = await window.html2canvas(cardRef.current, { scale: 4, useCORS: true, backgroundColor: '#ffffff' });</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const imgData = canvas.toDataURL('image/png', 1.0);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const cardWidth = 55;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const cardHeight = 85;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const gap = 15;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const totalWidth = (cardWidth * 2) + gap;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const startX = (210 - totalWidth) / 2;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const startY = 40;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const drawCropMarks = (x, y) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>pdf.setDrawColor(200);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>pdf.setLineWidth(0.1);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const len = 5; const offset = 2;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>pdf.line(x - len - offset, y, x - offset, y); pdf.line(x, y - len - offset, x, y - offset);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>pdf.line(x + cardWidth + offset, y, x + cardWidth + len + offset, y); pdf.line(x + cardWidth, y - len - offset, x + cardWidth, y - offset);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>pdf.line(x - len - offset, y + cardHeight, x - offset, y + cardHeight); pdf.line(x, y + cardHeight + offset, x, y + cardHeight + len + offset);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>pdf.line(x + cardWidth + offset, y + cardHeight, x + cardWidth + len + offset, y + cardHeight); pdf.line(x + cardWidth, y + cardHeight + offset, x + cardWidth, y + cardHeight + len + offset);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const x1 = startX;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>drawCropMarks(x1, startY);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>pdf.addImage(imgData, 'PNG', x1, startY, cardWidth, cardHeight, undefined, 'FAST');</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const x2 = startX + cardWidth + gap;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>drawCropMarks(x2, startY);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>pdf.addImage(imgData, 'PNG', x2, startY, cardWidth, cardHeight, undefined, 'FAST');</p>
+<p class="p1"><span class="Apple-converted-space">      </span>pdf.save(`名牌_${name}.pdf`);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>} catch (e) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>console.error("生成 PDF 失敗:", e);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>} finally {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setIsGenerating(false);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const allIcons = [...DEFAULT_ICONS, ...cloudIcons];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const filteredIcons = allIcons.filter(icon =&gt; icon.name.toLowerCase().includes(searchTerm.toLowerCase()));</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>return (</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div className="min-h-screen bg-slate-100 p-4 md:p-8 text-slate-800" style={{ fontFamily: 'sans-serif' }}&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8"&gt;</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>{/* 控制面板 */}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div className="lg:col-span-4 space-y-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div className="border-b pb-4 flex justify-between items-start"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;h1 className="text-xl font-bold text-[#2E4496] flex items-center gap-2"&gt;名牌產生器&lt;/h1&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;p className="text-xs text-slate-400 mt-1 font-medium"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>{isUnlocked ? '管理員模式已啟動' : '輕鬆幫你做出名牌！'}</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">              </span>onClick={() =&gt; { setShowSettings(!showSettings); if (showSettings) setIsUnlocked(false); }}</p>
+<p class="p1"><span class="Apple-converted-space">              </span>className={`p-2 rounded-lg transition-all ${showSettings ? 'bg-[#2E4496] text-white rotate-90' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;Settings size={22} /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p2"><span class="Apple-converted-space">          </span></p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div className="space-y-4"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>{/* 齒輪管理選單 */}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>{showSettings &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 animate-in fade-in slide-in-from-top-4 duration-300"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div className="flex items-center justify-between"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>{isUnlocked ? &lt;Unlock size={16} className="text-green-500" /&gt; : &lt;Lock size={16} className="text-slate-400" /&gt;}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>遇到問題？請聯絡小路</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;/h4&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>{isUnlocked &amp;&amp; &lt;button onClick={() =&gt; setIsUnlocked(false)} className="text-[10px] text-[#2E4496] underline"&gt;重新上鎖&lt;/button&gt;}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>{!isUnlocked ? (</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;div className="space-y-2"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;input<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                      </span>type="password" placeholder="輸入管理密碼..."<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                      </span>className={`w-full px-3 py-2 text-sm border rounded-lg outline-none transition-all ${passwordError ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>value={passwordInput} onChange={(e) =&gt; setPasswordInput(e.target.value)}</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>onKeyDown={(e) =&gt; e.key === 'Enter' &amp;&amp; handleUnlock()}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;button onClick={handleUnlock} className="w-full py-2 bg-[#2E4496] text-white rounded-lg text-xs font-bold hover:bg-[#1d2d66]"&gt;驗證解鎖&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>) : (</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;div className="space-y-4 animate-in zoom-in-95 duration-200"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;div className="pt-2 border-t border-slate-200"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;p className="text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider"&gt;1. 品牌 Logo 管理&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;button onClick={() =&gt; logoFileInputRef.current?.click()} disabled={isLogoSaving} className="w-full py-2.5 bg-white border border-[#2E4496] text-[#2E4496] rounded-lg text-xs font-bold flex items-center justify-center gap-2"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>{isLogoSaving ? &lt;Loader2 size={14} className="animate-spin" /&gt; : &lt;ImageIcon size={14} /&gt;} 重新上傳品牌 Logo</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;div className="pt-2 border-t border-slate-200"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;p className="text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider"&gt;2. 運動圖示庫管理&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;button onClick={() =&gt; iconFileInputRef.current?.click()} disabled={isSaving} className="w-full py-2.5 bg-green-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>{isSaving ? &lt;Loader2 size={14} className="animate-spin" /&gt; : &lt;Upload size={14} /&gt;} 上傳新圖示至選單</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>)}</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>)}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;label className="block text-sm font-medium mb-1 text-slate-600"&gt;員工姓名&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="relative"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;input</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>type="text"</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>value={name}</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>onChange={(e) =&gt; setName(e.target.value)}</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-[#149B65] outline-none font-bold text-[#149B65]"</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>placeholder="請輸入姓名"</p>
+<p class="p1"><span class="Apple-converted-space">                </span>/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;p className="text-[10px] text-slate-400 mt-1"&gt;※ 遇「空格」將自動換行&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="grid grid-cols-2 gap-4"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="space-y-1"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;label className="block text-sm font-medium text-slate-600"&gt;運動 1&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;button onClick={() =&gt; setShowSelector('L')} className="w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center overflow-hidden p-2 hover:border-[#149B65] transition-colors shadow-inner"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>{sportIconL ? &lt;img src={sportIconL} className="h-full object-contain" /&gt; : &lt;Plus className="text-slate-300" /&gt;}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="space-y-1"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;label className="block text-sm font-medium text-slate-600"&gt;運動 2&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;button onClick={() =&gt; setShowSelector('R')} className="w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center overflow-hidden p-2 hover:border-[#149B65] transition-colors shadow-inner"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>{sportIconR ? &lt;img src={sportIconR} className="h-full object-contain" /&gt; : &lt;Plus className="text-slate-300" /&gt;}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button onClick={downloadPDF} disabled={isGenerating || !libsLoaded} className="w-full mt-6 bg-[#2E4496] text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-[#1d2d66] transition-all active:scale-95"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>{isGenerating ? &lt;Loader2 className="animate-spin" /&gt; : "下載 PDF"}</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>{/* 右側預覽區 */}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div className="lg:col-span-8 flex flex-col items-center justify-center bg-slate-200 rounded-3xl p-10 min-h-[600px] overflow-auto"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div ref={cardRef} className="bg-white shadow-2xl flex flex-col items-start" style={{ width: '55mm', height: '85mm', border: '0.1mm solid #e2e8f0', overflow: 'hidden' }}&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="pt-[8mm] px-[6mm] w-full h-[16mm]"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;img src={logoUrl} className="max-w-[50%] h-auto object-contain" crossOrigin="anonymous" alt="Brand Logo" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="flex-1 px-[6mm] w-full pt-[3mm] flex flex-col text-left"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;p style={{ color: '#2E4496', fontSize: '20pt', fontWeight: 700, margin: 0, lineHeight: 1.1 }}&gt;你好，我是&lt;/p&gt;</p>
+<p class="p2"><span class="Apple-converted-space">              </span></p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;h2<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                </span>style={{<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                  </span>color: '#149B65',<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                  </span>fontSize: `${dynamicFontSize}pt`,<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                  </span>fontWeight: 700,</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>lineHeight: '1.05',<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                  </span>marginTop: name.length &lt; 6 ? '-1mm' : '1mm',</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>marginBottom: (name.length &lt; 6 &amp;&amp; hasDescenderLetters) ? '6mm' : '4mm',</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>textAlign: 'left',</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>wordBreak: 'break-word',</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>display: 'block'</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}}<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">              </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>{name ? name.split(' ').map((line, i) =&gt; (</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;span key={i} style={{ display: 'block' }}&gt;{line}&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>)) : "Louis"}</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/h2&gt;</p>
+<p class="p2"><span class="Apple-converted-space">              </span></p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;p style={{ color: '#2E4496', fontSize: '13pt', fontWeight: 500, margin: 0, marginTop: 'auto', paddingBottom: '5mm' }}&gt;{FIXED_SLOGAN}&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="h-[28mm] px-[6mm] pb-[8mm] w-full flex gap-6 items-center"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="w-[16mm] h-[16mm] flex items-center justify-center"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>{sportIconL &amp;&amp; &lt;img src={sportIconL} className="max-w-full max-h-full object-contain" crossOrigin="anonymous" /&gt;}</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="w-[16mm] h-[16mm] flex items-center justify-center"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>{sportIconR &amp;&amp; &lt;img src={sportIconR} className="max-w-full max-h-full object-contain" crossOrigin="anonymous" /&gt;}</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;p className="mt-6 text-slate-500 text-sm font-medium text-center"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>即時預覽僅供參考，實際依 PDF 為主。</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>{/* 圖示選單彈窗 */}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>{showSelector &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="p-6 border-b flex justify-between items-center bg-slate-50"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;h3 className="font-bold text-lg text-[#2E4496]"&gt;運動圖示選單&lt;/h3&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;p className="text-xs text-slate-400"&gt;目前共載入 {allIcons.length} 個項目&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;button onClick={() =&gt; setShowSelector(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"&gt;&lt;X size={20} /&gt;&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="p-4 border-b"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div className="relative"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;Search className="absolute left-4 top-3 h-4 w-4 text-slate-400" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;input<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                  </span>type="text" placeholder="搜尋運動項目..."<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">                  </span>className="w-full pl-11 pr-4 py-2 bg-slate-100 rounded-xl outline-none"</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>value={searchTerm} onChange={(e) =&gt; setSearchTerm(e.target.value)}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="flex-1 overflow-y-auto p-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>{filteredIcons.map((icon) =&gt; (</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div key={icon.id} className="relative group"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;button</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>onClick={() =&gt; { if (showSelector === 'L') setSportIconL(icon.url); if (showSelector === 'R') setSportIconR(icon.url); setShowSelector(null); }}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>className="w-full flex flex-col items-center gap-2 p-1 rounded-2xl hover:bg-green-50 border border-transparent hover:border-green-200 transition-all"</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;div className="w-full aspect-square bg-slate-50 rounded-xl flex items-center justify-center p-3 group-hover:scale-105 transition-transform shadow-sm border border-slate-100 overflow-hidden"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>{icon.url ? (</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>&lt;img src={icon.url} alt={icon.name} className="max-w-full max-h-full object-contain" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>) : (</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>&lt;span className="text-[10px] text-slate-300"&gt;N/A&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>)}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;span className="text-[10px] font-bold text-slate-500 text-center leading-tight truncate w-full mt-1 px-1"&gt;{icon.name}&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>{isUnlocked &amp;&amp; !icon.id.toString().startsWith('default') &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;button onClick={(e) =&gt; deleteIcon(e, icon.id)} className="absolute -top-1 -right-1 p-1 bg-red-100 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 shadow-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                      </span>&lt;Trash2 size={12} /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                  </span>)}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>))}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>)}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;input type="file" id="logo-upload" ref={logoFileInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;input type="file" id="icon-upload" ref={iconFileInputRef} className="hidden" accept="image/*" onChange={handleCloudIconUpload} /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>);</p>
+<p class="p1">};</p>
+<p class="p2"><br></p>
+<p class="p1">export default App;</p>
+</body>
+</html>
