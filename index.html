@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>裝備清單小幫手 | 畫筆標記工具</title>
+    <title>裝備清單小幫手</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -34,13 +34,6 @@
             width: 100%;
             height: auto;
             display: block;
-        }
-        
-        /* 避免長按選取文字影響操作 */
-        .no-select {
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
         }
 
         /* iOS 安全邊距 */
@@ -78,7 +71,7 @@
         <main class="w-full px-4 mt-5 flex-1">
             <div class="flex items-center justify-between mb-4 px-1">
                 <h2 id="current-category-title" class="text-xl font-bold text-gray-800"></h2>
-                <span class="text-xs text-[#3643ba] bg-[#3643ba]/10 px-2.5 py-1 rounded-full font-medium">點擊圖片開始標記</span>
+                <span class="text-[10px] sm:text-xs text-[#3643ba] bg-[#3643ba]/10 px-2.5 py-1 rounded-full font-medium">直接長按儲存，或點擊標記</span>
             </div>
             
             <!-- 批次下載區塊 -->
@@ -107,7 +100,7 @@
     <!-- 🚀 全域懸浮按鈕 (永遠跟隨在手機窗格的右下角) -->
     <div class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-safe">
         <div class="w-full max-w-[430px] relative pointer-events-none h-24">
-            <!-- 取消詭異陰影，改用霧面玻璃質感 -->
+            <!-- 霧面玻璃質感 -->
             <label class="absolute bottom-6 right-5 pointer-events-auto bg-[#3643ba]/80 backdrop-blur-md border border-white/30 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer">
                 <i class="fas fa-upload text-xl"></i>
                 <input type="file" id="upload-resume-mobile" class="hidden" accept="image/*">
@@ -178,7 +171,6 @@
                         </button>
                     </div>
                     
-                    <!-- 更改為指定的顏色順序：綠、藍、紅 -->
                     <div class="flex gap-2">
                         <button class="color-btn w-8 h-8 rounded-full shadow-md ring-2 ring-offset-2 ring-offset-[#1a1a1a] ring-[#4da6ff]" style="background-color: #34B78F;" data-color="#34B78F"></button>
                         <button class="color-btn w-8 h-8 rounded-full shadow-md ring-offset-2 ring-offset-[#1a1a1a]" style="background-color: #3643ba;" data-color="#3643ba"></button>
@@ -213,7 +205,9 @@
 
         let currentCategory = equipmentData[0].id;
         
-        const markedStates = {};
+        const markedStates = {}; // 儲存筆跡圖層
+        const markedMerged = {}; // 🚀 儲存「筆跡+底圖」的合成圖 (供首頁預覽與長按儲存)
+        
         let currentEditingUrl = null;
         let isModified = false;
 
@@ -227,7 +221,6 @@
             equipmentData.forEach(cat => {
                 const btn = document.createElement('button');
                 const isActive = cat.id === currentCategory;
-                // 改回純淨白底樣式的標籤，配合白色的背景
                 btn.className = `snap-start px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${
                     isActive ? 'bg-[#3643ba] text-white border-[#3643ba] shadow-md' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 shadow-sm'
                 }`;
@@ -248,37 +241,36 @@
 
             category.images.forEach((imgUrl, index) => {
                 const imgWrap = document.createElement('div');
-                // 取消所有內邊距(Padding)與多餘的邊框，圓角統一改為 rounded-xl，讓圖片填滿整個卡片
                 imgWrap.className = 'relative cursor-pointer bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden active:scale-[0.98] transition-transform';
                 
                 const img = document.createElement('img');
-                img.src = imgUrl;
-                // 圖片本身設為 block 並交由 imgWrap 的 overflow-hidden 來裁切圓角
-                img.className = 'w-full h-auto object-cover block no-select pointer-events-none';
+                // 🚀 核心：如果有合成好的預覽圖，就優先顯示它！這讓使用者可以直接看到自己的標記，也能透過原生長按儲存含有筆跡的圖片。
+                img.src = markedMerged[imgUrl] || imgUrl;
+                
+                // 🚀 核心：移除 pointer-events-none，讓瀏覽器原生支援長按選單
+                img.className = 'w-full h-auto object-cover block';
+                // 強制開啟 iOS 長按選單 (針對 webkit 核心)
+                img.style.webkitTouchCallout = 'default';
                 
                 if (markedStates[imgUrl]) {
                     const badge = document.createElement('div');
-                    // 徽章移到更邊緣一點，因為沒有 padding 了
-                    badge.className = 'absolute top-3 left-3 bg-green-500/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10 flex items-center gap-1 border border-green-400/50';
+                    badge.className = 'absolute top-3 left-3 bg-green-500/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10 flex items-center gap-1 border border-green-400/50 pointer-events-none';
                     badge.innerHTML = '<i class="fas fa-check-circle"></i> 已保存';
                     imgWrap.appendChild(badge);
                 }
 
-                // 🚀 新增：為「我的上傳」的圖片加上刪除按鈕
                 if (currentCategory === 'my_uploads') {
                     const deleteBtn = document.createElement('button');
-                    // 為了配合白底，可以將叉叉按鈕改為半透明黑色或維持紅色
                     deleteBtn.className = 'absolute top-3 right-3 bg-black/40 backdrop-blur-md text-white w-8 h-8 rounded-full shadow-md z-20 flex items-center justify-center hover:bg-red-500 transition';
-                    // 將垃圾桶改為叉叉
                     deleteBtn.innerHTML = '<i class="fas fa-times text-sm"></i>';
                     deleteBtn.onclick = (e) => {
-                        e.stopPropagation(); // 阻止觸發打開編輯器
+                        e.stopPropagation(); 
+                        e.preventDefault();
                         
-                        // 移除 confirm() 避免預覽環境阻擋導致當機
                         category.images.splice(index, 1);
-                        delete markedStates[imgUrl]; // 同時清除標記狀態
+                        delete markedStates[imgUrl]; 
+                        delete markedMerged[imgUrl]; // 一併清除合成圖
                         
-                        // 如果圖片全刪光了，移除「我的上傳」分類並跳回第一個
                         if (category.images.length === 0) {
                             const catIndex = equipmentData.findIndex(c => c.id === 'my_uploads');
                             if (catIndex !== -1) equipmentData.splice(catIndex, 1);
@@ -290,11 +282,17 @@
                     imgWrap.appendChild(deleteBtn);
                 }
 
-                imgWrap.onclick = () => openEditor(imgUrl);
+                // 點擊觸發編輯器 (忽略刪除按鈕的點擊)
+                imgWrap.onclick = (e) => {
+                    if (e.target.closest('button')) return;
+                    openEditor(imgUrl);
+                };
+
                 imgWrap.appendChild(img);
                 galleryContainer.appendChild(imgWrap);
             });
 
+            // 批次下載 UI 更新
             const batchContainer = document.getElementById('batch-download-container');
             const markedCountSpan = document.getElementById('marked-count');
             const markedKeys = Object.keys(markedStates);
@@ -327,7 +325,6 @@
         let undoStack = [];
         let redoStack = [];
 
-        // DOM 綁定
         const toolMove = document.getElementById('tool-move');
         const toolPen = document.getElementById('tool-pen');
         const toolEraser = document.getElementById('tool-eraser');
@@ -337,7 +334,6 @@
         const undoBtn = document.getElementById('undo-btn');
         const redoBtn = document.getElementById('redo-btn');
 
-        // 切換工具
         function setTool(tool) {
             currentTool = tool;
             
@@ -376,7 +372,6 @@
 
         sizeInput.oninput = (e) => { currentSize = e.target.value; };
 
-        // 歷史紀錄
         function updateUndoRedoUI() {
             undoBtn.disabled = undoStack.length <= 1;
             redoBtn.disabled = redoStack.length === 0;
@@ -416,7 +411,6 @@
             }
         };
 
-        // 開啟與關閉編輯器
         function openEditor(imageSource) {
             currentEditingUrl = imageSource;
             isModified = false;
@@ -424,7 +418,6 @@
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             
-            // 動畫滑入
             setTimeout(() => { 
                 modalBackdrop.classList.remove('opacity-0');
                 modalContent.classList.remove('translate-y-full');
@@ -454,7 +447,6 @@
                     undoStack = []; redoStack = []; saveState();
                 }
                 
-                // 🚀 核心更新：點選第一個按鈕 (綠色) 時，會自動切換並鎖定為「畫筆」工具
                 colorBtns[0].click(); 
             };
             
@@ -463,7 +455,6 @@
                 closeEditor();
             };
             
-            // 🚀 核心修復：判斷如果是本地上傳的 blob 網址，就直接讀取，不要經過雲端代理
             if (typeof imageSource === 'string' && imageSource.startsWith('blob:')) {
                 img.src = imageSource;
             } else if (imageSource instanceof File) {
@@ -476,10 +467,19 @@
 
         function closeEditor() {
             if (currentEditingUrl && isModified) {
+                // 儲存筆跡供下次編輯使用
                 markedStates[currentEditingUrl] = drawCanvas.toDataURL();
+                
+                // 🚀 核心：同步產生一張「底圖+筆跡」的合成圖！供首頁顯示與長按原生下載
+                const mCanvas = document.createElement('canvas');
+                mCanvas.width = bgCanvas.width;
+                mCanvas.height = bgCanvas.height;
+                const mCtx = mCanvas.getContext('2d');
+                mCtx.drawImage(bgCanvas, 0, 0);
+                mCtx.drawImage(drawCanvas, 0, 0);
+                markedMerged[currentEditingUrl] = mCanvas.toDataURL('image/png');
             }
 
-            // 動畫滑出
             modalBackdrop.classList.add('opacity-0');
             modalContent.classList.add('translate-y-full');
             
@@ -492,7 +492,7 @@
                     renderGallery(); 
                 }
                 currentEditingUrl = null;
-            }, 300); // 等待動畫完成
+            }, 300); 
         }
 
         document.getElementById('cancel-edit').onclick = closeEditor;
@@ -600,8 +600,9 @@
             }, 1500);
         };
 
+        // 🚀 修改：打包下載按鈕現在直接運用剛剛生成的 markedMerged，速度超級快！
         document.getElementById('download-all-btn').onclick = async () => {
-            const urls = Object.keys(markedStates);
+            const urls = Object.keys(markedMerged);
             if(urls.length === 0) return;
 
             const btn = document.getElementById('download-all-btn');
@@ -611,13 +612,20 @@
 
             for (let i = 0; i < urls.length; i++) {
                 const url = urls[i];
-                const strokeData = markedStates[url];
+                const mergedDataUrl = markedMerged[url];
                 
                 let catName = '裝備清單';
                 equipmentData.forEach(c => { if(c.images.includes(url)) catName = c.name; });
                 
-                await downloadSingleImage(url, strokeData, `${catName}_第${i+1}份`);
-                await new Promise(r => setTimeout(r, 800)); 
+                if (mergedDataUrl) {
+                    const link = document.createElement('a');
+                    link.download = `${catName}_第${i+1}份_${new Date().getTime()}.png`;
+                    link.href = mergedDataUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                await new Promise(r => setTimeout(r, 500)); 
             }
 
             btn.innerHTML = '<i class="fas fa-check"></i> 下載完成';
@@ -629,41 +637,6 @@
             }, 2000);
         };
 
-        function downloadSingleImage(bgUrl, strokeDataUrl, filenamePrefix) {
-            return new Promise((resolve) => {
-                const bgImg = new Image();
-                bgImg.crossOrigin = "anonymous";
-                bgImg.onload = () => {
-                    const mCanvas = document.createElement('canvas');
-                    mCanvas.width = bgImg.width;
-                    mCanvas.height = bgImg.height;
-                    const mCtx = mCanvas.getContext('2d');
-                    mCtx.drawImage(bgImg, 0, 0);
-
-                    const strokeImg = new Image();
-                    strokeImg.onload = () => {
-                        mCtx.drawImage(strokeImg, 0, 0);
-                        const dataURL = mCanvas.toDataURL('image/png');
-                        const link = document.createElement('a');
-                        link.download = `${filenamePrefix}_${new Date().getTime()}.png`;
-                        link.href = dataURL;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        resolve();
-                    };
-                    strokeImg.src = strokeDataUrl;
-                };
-                bgImg.onerror = resolve; 
-                
-                if (bgUrl.startsWith('blob:')) {
-                    bgImg.src = bgUrl;
-                } else {
-                    bgImg.src = "https://wsrv.nl/?url=" + encodeURIComponent(bgUrl);
-                }
-            });
-        }
-
         const handleUpload = function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -672,26 +645,22 @@
                 return;
             }
             
-            // 🚀 核心修復：將上傳的圖片動態加入到「我的上傳」分類中！
             const blobUrl = URL.createObjectURL(file);
             
             let uploadCat = equipmentData.find(c => c.id === 'my_uploads');
             if (!uploadCat) {
                 uploadCat = { id: 'my_uploads', name: '我的上傳', images: [] };
-                equipmentData.push(uploadCat); // 加入總選單中
+                equipmentData.push(uploadCat); 
             }
             
-            // 避免重複加入
             if(!uploadCat.images.includes(blobUrl)) {
                 uploadCat.images.push(blobUrl);
             }
             
-            // 切換到「我的上傳」分類並重新渲染畫面
             currentCategory = 'my_uploads';
             renderTabs();
             renderGallery();
             
-            // 直接打開編輯器
             openEditor(blobUrl);
             this.value = ''; 
         };
