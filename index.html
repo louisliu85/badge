@@ -57,6 +57,10 @@
                     </div>
                     裝備清單小幫手
                 </h1>
+                <!-- 🚀 新增：右上角資訊按鈕 -->
+                <button id="show-info-btn" class="w-8 h-8 rounded-full bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 hover:text-[#3643ba] active:scale-95 flex items-center justify-center transition shadow-sm">
+                    <i class="fas fa-info"></i>
+                </button>
             </div>
 
             <!-- 水平滑動分類選單 -->
@@ -69,12 +73,12 @@
 
         <!-- 主內容區塊 -->
         <main class="w-full px-4 mt-5 flex-1">
-            <div class="flex items-center justify-between mb-4 px-1">
+            <div class="flex items-center justify-between mb-3 px-1">
                 <h2 id="current-category-title" class="text-xl font-bold text-gray-800"></h2>
-                <span class="text-[10px] sm:text-xs text-[#3643ba] bg-[#3643ba]/10 px-2.5 py-1 rounded-full font-medium">直接長按儲存，或點擊標記</span>
+                <span class="text-[10px] sm:text-xs text-[#3643ba] bg-[#3643ba]/10 px-2.5 py-1 rounded-full font-medium shrink-0">直接長按儲存，或點擊標記</span>
             </div>
             
-            <!-- 批次下載區塊 -->
+            <!-- 批次下載區塊 (已移除舊的 inline 黃色提示橫幅) -->
             <div id="batch-download-container" class="hidden mb-5 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 items-center justify-between transition-all duration-300">
                 <div class="flex items-center gap-3">
                     <div class="bg-green-100 text-green-600 w-10 h-10 rounded-full flex items-center justify-center text-xl shrink-0">
@@ -82,7 +86,7 @@
                     </div>
                     <div>
                         <h3 class="font-bold text-gray-800 text-sm">已標記 <span id="marked-count" class="text-[#3643ba] text-lg">0</span> 張清單</h3>
-                        <p class="text-[10px] text-gray-500">自動保存，可隨時修改</p>
+                        <p class="text-[10px] text-gray-500">已保存，可隨時修改</p>
                     </div>
                 </div>
                 <button id="download-all-btn" class="bg-[#3643ba] text-white px-3 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition active:scale-95 shrink-0 flex items-center gap-1.5 text-sm">
@@ -105,6 +109,24 @@
                 <i class="fas fa-upload text-xl"></i>
                 <input type="file" id="upload-resume-mobile" class="hidden" accept="image/*">
             </label>
+        </div>
+    </div>
+
+    <!-- 💡 新增：資訊提示彈窗 -->
+    <div id="info-modal" class="fixed inset-0 z-[60] hidden flex-col items-center justify-center bg-transparent">
+        <div id="info-backdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+        <div id="info-content" class="w-[85%] max-w-[320px] bg-white rounded-[24px] shadow-2xl p-6 flex flex-col items-center text-center relative z-10 transform scale-95 opacity-0 transition-all duration-300">
+            <div class="w-14 h-14 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-2xl mb-4 shadow-sm border border-amber-100">
+                <i class="fas fa-bell"></i>
+            </div>
+            <h3 class="text-[18px] font-bold text-gray-800 mb-2">溫馨提示</h3>
+            <p class="text-[14px] text-gray-500 mb-6 leading-relaxed">
+                標記資料僅暫存於本機，<br><span class="font-bold text-amber-600">請勿重整或直接關閉網頁</span>，以免資料遺失。<br><br>離開前，請記得<span class="font-bold text-[#3643ba]">長按圖片</span><br>或點擊<span class="font-bold text-[#3643ba]">打包</span>來下載保存喔！<br><br>也可使用圓形上傳按鈕<br>上傳已標記的清單圖片，繼續進行編輯！
+
+            </p>
+            <button id="close-info-btn" class="w-full bg-[#3643ba] text-white font-bold py-3.5 rounded-xl hover:bg-blue-800 transition active:scale-95 shadow-md text-[15px]">
+                好，我了解了
+            </button>
         </div>
     </div>
 
@@ -667,9 +689,52 @@
 
         document.getElementById('upload-resume-mobile').addEventListener('change', handleUpload);
 
+        // 🚀 新增：防止使用者誤觸重新整理或關閉網頁 (系統防護)
+        window.addEventListener('beforeunload', function (e) {
+            // 只要有任何標記紀錄，或者目前編輯器有未存檔的筆跡，就觸發瀏覽器警告
+            if (Object.keys(markedStates).length > 0 || isModified) {
+                // 顯示瀏覽器內建的離開警告對話框
+                e.preventDefault();
+                e.returnValue = ''; 
+            }
+        });
+
+        // 💡 新增：資訊彈窗邏輯
+        const infoModal = document.getElementById('info-modal');
+        const infoBackdrop = document.getElementById('info-backdrop');
+        const infoContent = document.getElementById('info-content');
+        const showInfoBtn = document.getElementById('show-info-btn');
+        const closeInfoBtn = document.getElementById('close-info-btn');
+
+        function openInfoModal() {
+            infoModal.classList.remove('hidden');
+            infoModal.classList.add('flex');
+            // 強制重繪以觸發流暢動畫
+            void infoModal.offsetWidth; 
+            infoBackdrop.classList.remove('opacity-0');
+            infoContent.classList.remove('scale-95', 'opacity-0');
+            infoContent.classList.add('scale-100', 'opacity-100');
+        }
+
+        function closeInfoModal() {
+            infoBackdrop.classList.add('opacity-0');
+            infoContent.classList.remove('scale-100', 'opacity-100');
+            infoContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                infoModal.classList.remove('flex');
+                infoModal.classList.add('hidden');
+            }, 300);
+        }
+
+        showInfoBtn.onclick = openInfoModal;
+        closeInfoBtn.onclick = closeInfoModal;
+
         // 初始化
         renderTabs();
         renderGallery();
+
+        // 網頁載入後，延遲 0.5 秒自動彈出提示框
+        setTimeout(openInfoModal, 500);
     </script>
 </body>
 </html>
