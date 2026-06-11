@@ -9,7 +9,6 @@
     <style>
         /* 基礎設定 */
         body {
-            /* 電腦版背景色：讓中央的手機窗格更跳脫 */
             background-color: #cbd5e1; 
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
             color: #1e293b;
@@ -22,107 +21,123 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* 畫布容器 */
-        #canvas-wrapper {
-            position: relative;
-            width: 100%;
-            margin: 0 auto;
-            transform-origin: top center;
-        }
-        
-        canvas {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-
         /* iOS 安全邊距 */
         .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
         .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
         .mb-safe { margin-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+        /* 雜誌架 3D 與材質設定 */
+        .wood-rack {
+            background-color: #ffffff; /* 改為純白底色 */
+        }
+        .wood-shelf {
+            /* 模擬木板的厚度與陰影 */
+            background: linear-gradient(to bottom, #d2bba3, #b89d81);
+            border-bottom: 12px solid #a38568;
+            box-shadow: 0 12px 15px -4px rgba(0,0,0,0.25), inset 0 2px 4px rgba(255,255,255,0.3);
+            position: relative;
+        }
+        .wood-shelf::before {
+            /* 層架背面的微陰影，增加立體感 */
+            content: '';
+            position: absolute;
+            top: -20px; left: 0; right: 0; height: 20px;
+            background: linear-gradient(to top, rgba(0,0,0,0.08), transparent);
+            pointer-events: none;
+        }
+        .magazine-item {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: bottom center;
+        }
+        .magazine-item:active {
+            transform: scale(0.96) translateY(2px);
+        }
+        
+        /* 頁面切換動畫 */
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
-<!-- body 加上置中與滿版，準備放置手機窗格 -->
 <body class="flex justify-center items-start">
 
-    <!-- 📱 核心：強制手機比例窗格 (極簡純白乾淨風格) -->
-    <div class="w-full max-w-[430px] bg-white min-h-screen relative shadow-[0_0_40px_rgba(0,0,0,0.15)] sm:border-x sm:border-gray-200 flex flex-col pb-24 overflow-x-hidden">
+    <!-- 📱 核心：強制手機比例窗格 -->
+    <div class="w-full max-w-[430px] bg-white min-h-screen relative shadow-[0_0_40px_rgba(0,0,0,0.15)] sm:border-x sm:border-gray-200 flex flex-col overflow-x-hidden">
 
-        <!-- 置頂標題與導航 -->
-        <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm pt-safe w-full">
-            <div class="px-4 py-3 flex justify-between items-center">
-                <h1 class="text-xl font-extrabold text-[#3643ba] tracking-tight flex items-center gap-2">
-                    <div class="bg-[#3643ba] text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-md">
-                        <i class="fas fa-mountain text-sm"></i>
-                    </div>
-                    裝備清單小幫手
-                </h1>
-                <!-- 🚀 新增：右上角資訊按鈕 -->
+        <!-- 置頂標題 -->
+        <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm pt-safe w-full flex-none">
+            <div class="px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <!-- 新增：返回按鈕 (首頁時隱藏) -->
+                    <button id="back-btn" class="hidden w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 active:scale-95 transition">
+                        <i class="fas fa-chevron-left text-sm"></i>
+                    </button>
+                    
+                    <h1 class="text-xl font-extrabold text-[#3643ba] tracking-tight flex items-center gap-2">
+                        <div class="bg-[#3643ba] text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-md">
+                            <i class="fas fa-mountain text-sm"></i>
+                        </div>
+                        <span id="header-title">裝備清單小幫手</span>
+                    </h1>
+                </div>
+
+                <!-- 右上角資訊按鈕 -->
                 <button id="show-info-btn" class="w-8 h-8 rounded-full bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 hover:text-[#3643ba] active:scale-95 flex items-center justify-center transition shadow-sm">
                     <i class="fas fa-info"></i>
                 </button>
             </div>
+        </header>
 
+        <!-- 📚 視圖 1：雜誌架主頁面 -->
+        <main id="home-view" class="flex-1 wood-rack pb-12 w-full flex flex-col">
+            <!-- 裝飾性頂部 -->
+            <div class="w-full pt-6 pb-2 text-center text-[#8a7258] font-bold text-sm tracking-widest opacity-60">
+                請點選你要找的裝備清單
+            </div>
+            
+            <!-- 雜誌架容器 (動態生成) -->
+            <div id="rack-container" class="w-full px-4 flex flex-col mt-2">
+                <!-- 由 JS 動態生成層架與雜誌 -->
+            </div>
+        </main>
+
+        <!-- 📋 視圖 2：清單詳細頁面 (預設隱藏) -->
+        <main id="detail-view" class="hidden flex-1 w-full bg-white flex flex-col pb-10">
             <!-- 水平滑動分類選單 -->
-            <nav class="w-full px-2 pb-3">
+            <nav class="w-full px-2 pt-3 pb-3 border-b border-gray-50 bg-white/95 sticky top-0 z-20">
                 <div class="flex gap-2 overflow-x-auto no-scrollbar px-2 snap-x" id="category-tabs">
                     <!-- 標籤會由 JS 動態生成 -->
                 </div>
             </nav>
-        </header>
 
-        <!-- 主內容區塊 -->
-        <main class="w-full px-4 mt-5 flex-1">
-            <div class="flex items-center justify-between mb-3 px-1">
-                <h2 id="current-category-title" class="text-xl font-bold text-gray-800"></h2>
-                <span class="text-[10px] sm:text-xs text-[#3643ba] bg-[#3643ba]/10 px-2.5 py-1 rounded-full font-medium shrink-0">直接長按儲存，或點擊標記</span>
-            </div>
-            
-            <!-- 批次下載區塊 (已移除舊的 inline 黃色提示橫幅) -->
-            <div id="batch-download-container" class="hidden mb-5 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 items-center justify-between transition-all duration-300">
-                <div class="flex items-center gap-3">
-                    <div class="bg-green-100 text-green-600 w-10 h-10 rounded-full flex items-center justify-center text-xl shrink-0">
-                        <i class="fas fa-check-double"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-gray-800 text-sm">已標記 <span id="marked-count" class="text-[#3643ba] text-lg">0</span> 張清單</h3>
-                        <p class="text-[10px] text-gray-500">已保存，可隨時修改</p>
-                    </div>
+            <div class="w-full px-4 mt-5 flex-1">
+                <div class="flex items-center justify-between mb-5 px-1">
+                    <h2 id="current-category-title" class="text-xl font-bold text-gray-800"></h2>
+                    <span class="text-[10px] sm:text-xs text-[#3643ba] bg-[#3643ba]/10 px-2.5 py-1 rounded-full font-medium shrink-0">長按圖片即可儲存</span>
                 </div>
-                <button id="download-all-btn" class="bg-[#3643ba] text-white px-3 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition active:scale-95 shrink-0 flex items-center gap-1.5 text-sm">
-                    <i class="fas fa-layer-group"></i> 打包
-                </button>
-            </div>
 
-            <!-- 圖片展示網格 (強制單欄) -->
-            <div id="image-gallery" class="grid grid-cols-1 gap-5">
-                <!-- 圖片會由 JS 動態生成 -->
+                <!-- 圖片展示網格 -->
+                <div id="image-gallery" class="grid grid-cols-1 gap-5">
+                    <!-- 圖片會由 JS 動態生成 -->
+                </div>
             </div>
         </main>
     </div>
 
-    <!-- 🚀 全域懸浮按鈕 (永遠跟隨在手機窗格的右下角) -->
-    <div class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-safe">
-        <div class="w-full max-w-[430px] relative pointer-events-none h-24">
-            <!-- 霧面玻璃質感 -->
-            <label class="absolute bottom-6 right-5 pointer-events-auto bg-[#3643ba]/80 backdrop-blur-md border border-white/30 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer">
-                <i class="fas fa-upload text-xl"></i>
-                <input type="file" id="upload-resume-mobile" class="hidden" accept="image/*">
-            </label>
-        </div>
-    </div>
-
-    <!-- 💡 新增：資訊提示彈窗 -->
+    <!-- 💡 資訊提示彈窗 -->
     <div id="info-modal" class="fixed inset-0 z-[60] hidden flex-col items-center justify-center bg-transparent">
         <div id="info-backdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
         <div id="info-content" class="w-[85%] max-w-[320px] bg-white rounded-[24px] shadow-2xl p-6 flex flex-col items-center text-center relative z-10 transform scale-95 opacity-0 transition-all duration-300">
-            <div class="w-14 h-14 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-2xl mb-4 shadow-sm border border-amber-100">
-                <i class="fas fa-bell"></i>
+            <div class="w-14 h-14 bg-blue-50 text-[#3643ba] rounded-full flex items-center justify-center text-2xl mb-4 shadow-sm border border-blue-100">
+                <i class="fas fa-lightbulb"></i>
             </div>
-            <h3 class="text-[18px] font-bold text-gray-800 mb-2">溫馨提示</h3>
+            <h3 class="text-[18px] font-bold text-gray-800 mb-2">使用提示</h3>
             <p class="text-[14px] text-gray-500 mb-6 leading-relaxed">
-                標記資料僅暫存於本機，<br><span class="font-bold text-amber-600">請勿重整或直接關閉網頁</span>，以免資料遺失。<br><br>離開前，請記得<span class="font-bold text-[#3643ba]">長按圖片</span><br>或點擊<span class="font-bold text-[#3643ba]">打包</span>來下載保存喔！<br><br>也可使用圓形上傳按鈕<br>上傳已標記的清單圖片，繼續進行編輯！
-
+                在首頁的<span class="font-bold text-[#8a7258]">雜誌架</span>挑選分類，<br>
+                進入後找到想下載的清單，<br>
+                <span class="font-bold text-[#3643ba]">長按圖片</span>即可儲存清單喔！
             </p>
             <button id="close-info-btn" class="w-full bg-[#3643ba] text-white font-bold py-3.5 rounded-xl hover:bg-blue-800 transition active:scale-95 shadow-md text-[15px]">
                 好，我了解了
@@ -130,85 +145,8 @@
         </div>
     </div>
 
-    <!-- 🌟 全螢幕原生風格編輯器 -->
-    <div id="editor-modal" class="fixed inset-0 z-50 hidden flex-col items-center bg-transparent">
-        
-        <!-- 全螢幕黑色半透明遮罩 (針對電腦螢幕) -->
-        <div id="modal-backdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
-        
-        <!-- 真正的手機比例編輯器內容區 (深色霧面玻璃) -->
-        <div id="modal-content" class="w-full max-w-[430px] h-full flex flex-col bg-black/40 backdrop-blur-3xl relative transform translate-y-full transition-transform duration-300 sm:border-x sm:border-white/10 shadow-2xl">
-            
-            <!-- 頂部操作列 -->
-            <div class="flex-none pt-safe bg-white/10 backdrop-blur-2xl border-b border-white/10 z-20">
-                <div class="flex justify-between items-center px-3 py-3">
-                    <button id="cancel-edit" class="text-[#4da6ff] bg-[#4da6ff]/10 hover:bg-[#4da6ff]/20 font-bold px-3 py-1.5 rounded-xl active:scale-95 transition flex items-center gap-1 text-sm">
-                        <i class="fas fa-chevron-left text-xs"></i> 返回
-                    </button>
-                    <div class="text-gray-300 font-medium text-[10px] bg-white/5 px-2 py-1 rounded-full flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> 暫存中
-                    </div>
-                    <button id="save-image" class="text-white bg-[#4da6ff] hover:bg-blue-400 font-bold px-3 py-1.5 rounded-xl active:scale-95 transition flex items-center gap-1 shadow-md text-sm">
-                        下載 <i class="fas fa-download text-xs"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 畫布滾動區 -->
-            <div id="scroll-container" class="flex-1 overflow-y-auto overflow-x-hidden relative no-scrollbar">
-                <div class="py-6 px-3 min-h-full flex items-center justify-center">
-                    <!-- 圓角統一改為 rounded-xl，與外部清單保持一致 -->
-                    <div id="canvas-wrapper" class="relative w-full bg-white shadow-2xl overflow-hidden rounded-xl">
-                        <canvas id="bg-canvas" class="w-full h-auto block pointer-events-none"></canvas>
-                        <canvas id="draw-canvas" class="absolute top-0 left-0 w-full h-full block touch-none pointer-events-none"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 底部工具列 -->
-            <div class="flex-none bg-white/10 backdrop-blur-2xl border-t border-white/10 pb-safe z-20">
-                
-                <div class="px-5 py-3 flex items-center justify-between gap-4 border-b border-white/5">
-                    <i class="fas fa-circle text-[6px] text-gray-500"></i>
-                    <input type="range" id="brush-size" min="2" max="24" value="5" class="flex-1 accent-[#4da6ff]">
-                    <i class="fas fa-circle text-[16px] text-gray-500 mr-2"></i>
-                    
-                    <div class="flex gap-4 border-l border-white/10 pl-4">
-                        <button id="undo-btn" class="text-gray-400 active:text-white disabled:opacity-30 disabled:active:text-gray-400 text-xl" disabled><i class="fas fa-undo"></i></button>
-                        <button id="redo-btn" class="text-gray-400 active:text-white disabled:opacity-30 disabled:active:text-gray-400 text-xl" disabled><i class="fas fa-redo"></i></button>
-                    </div>
-                </div>
-
-                <div class="px-4 py-3 flex justify-between items-center">
-                    
-                    <div class="flex gap-1 bg-black/50 p-1 rounded-xl">
-                        <button id="tool-move" class="w-12 h-10 rounded-lg bg-[#4da6ff] text-white shadow flex items-center justify-center text-lg transition" title="滑動瀏覽">
-                            <i class="fas fa-hand-paper"></i>
-                        </button>
-                        <button id="tool-pen" class="w-12 h-10 rounded-lg text-gray-400 hover:text-white flex items-center justify-center text-lg transition" title="畫筆">
-                            <i class="fas fa-pen"></i>
-                        </button>
-                        <button id="tool-eraser" class="w-12 h-10 rounded-lg text-gray-400 hover:text-white flex items-center justify-center text-lg transition" title="橡皮擦">
-                            <i class="fas fa-eraser"></i>
-                        </button>
-                    </div>
-                    
-                    <div class="flex gap-2">
-                        <button class="color-btn w-8 h-8 rounded-full shadow-md ring-2 ring-offset-2 ring-offset-[#1a1a1a] ring-[#4da6ff]" style="background-color: #34B78F;" data-color="#34B78F"></button>
-                        <button class="color-btn w-8 h-8 rounded-full shadow-md ring-offset-2 ring-offset-[#1a1a1a]" style="background-color: #3643ba;" data-color="#3643ba"></button>
-                        <button class="color-btn w-8 h-8 rounded-full shadow-md ring-offset-2 ring-offset-[#1a1a1a]" style="background-color: #D70321;" data-color="#D70321"></button>
-                    </div>
-
-                    <button id="clear-canvas" class="w-10 h-10 rounded-full bg-red-500/20 text-red-500 active:bg-red-500 active:text-white flex items-center justify-center text-lg transition ml-1">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
-        // --- 1. 資料設定與狀態儲存 ---
+        // --- 1. 資料設定 ---
         const equipmentData = [
             { id: 'walking', name: '行腳裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E8%A1%8C%E8%85%B3%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis.jpeg'] },
             { id: 'hiking', name: '健行裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E5%81%A5%E8%A1%8C%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis.jpeg'] },
@@ -216,28 +154,91 @@
                 'https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E7%99%BB%E5%B1%B1%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis-1.jpeg',
                 'https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E7%99%BB%E5%B1%B1%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis-2.jpeg'
             ] },
+            { id: 'snow', name: '雪季裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E9%9B%AA%E5%AD%A3%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Melody.jpeg'] },
             { id: 'fuji', name: '富士山裝備', images: [
                 'https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E5%AF%8C%E5%A3%AB%E5%B1%B1%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis-1.jpeg',
                 'https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E5%AF%8C%E5%A3%AB%E5%B1%B1%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis-2.jpeg'
             ] },
             { id: 'camping', name: '露營裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E9%9C%B2%E7%87%9F%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Louis.jpeg'] },
-            { id: 'running', name: '路跑裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E8%B7%AF%E8%B7%91%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Moco.jpeg'] },
-            { id: 'snow', name: '雪季裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E9%9B%AA%E5%AD%A3%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Melody.jpeg'] }
+            { id: 'running', name: '路跑裝備', images: ['https://storage.hash.cloud/KmqWx4hUJsdMU9YNSMxWlWMnXzr2/DKTBADGE1//%EF%BC%88%E9%9B%BB%EF%BC%89%E8%B7%AF%E8%B7%91%E8%A3%9D%E5%82%99%E6%B8%85%E5%96%AE%20by%20Moco.jpeg'] }
         ];
 
         let currentCategory = equipmentData[0].id;
-        
-        const markedStates = {}; // 儲存筆跡圖層
-        const markedMerged = {}; // 🚀 儲存「筆跡+底圖」的合成圖 (供首頁預覽與長按儲存)
-        
-        let currentEditingUrl = null;
-        let isModified = false;
 
-        // --- 2. 介面渲染 ---
+        // --- 2. 視圖切換與元件控制 ---
+        const homeView = document.getElementById('home-view');
+        const detailView = document.getElementById('detail-view');
+        const backBtn = document.getElementById('back-btn');
+        const headerTitle = document.getElementById('header-title');
+        
+        const rackContainer = document.getElementById('rack-container');
         const tabsContainer = document.getElementById('category-tabs');
         const galleryContainer = document.getElementById('image-gallery');
         const titleElement = document.getElementById('current-category-title');
 
+        // 切換到首頁 (雜誌架)
+        function showHome() {
+            homeView.classList.remove('hidden');
+            homeView.classList.add('fade-in');
+            detailView.classList.add('hidden');
+            backBtn.classList.add('hidden');
+            headerTitle.textContent = '裝備清單小幫手';
+        }
+
+        // 切換到清單詳細頁
+        function showDetail(categoryId) {
+            currentCategory = categoryId;
+            homeView.classList.add('hidden');
+            detailView.classList.remove('hidden');
+            detailView.classList.add('fade-in');
+            backBtn.classList.remove('hidden');
+            
+            // 重新渲染該頁內容
+            renderTabs();
+            renderGallery();
+            
+            // 切換時自動回到頂部
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        backBtn.addEventListener('click', showHome);
+
+        // --- 3. 渲染雜誌架 (首頁) ---
+        function renderRack() {
+            rackContainer.innerHTML = '';
+            
+            // 將資料分組，每列層架放 2 本雜誌 (最後一列可能只有 1 本)
+            const itemsPerShelf = 2;
+            for (let i = 0; i < equipmentData.length; i += itemsPerShelf) {
+                const shelfItems = equipmentData.slice(i, i + itemsPerShelf);
+                
+                // 建立層架的 HTML 結構
+                const shelfDiv = document.createElement('div');
+                shelfDiv.className = 'wood-shelf w-full flex justify-evenly items-end pt-8 pb-0 px-2 mb-8 rounded-sm';
+                
+                shelfItems.forEach(cat => {
+                    const magDiv = document.createElement('div');
+                    // 設定雜誌的樣式：白色邊框模擬書本邊緣、陰影、點擊事件
+                    magDiv.className = 'magazine-item relative w-[42%] bg-white p-0 shadow-[4px_8px_16px_rgba(0,0,0,0.4)] cursor-pointer z-10 rounded-sm border border-gray-100';
+                    magDiv.onclick = () => showDetail(cat.id);
+                    
+                    // 使用該分類的第一張圖作為「雜誌封面」
+                    const coverUrl = cat.images[0];
+                    
+                    magDiv.innerHTML = `
+                        <div class="relative w-full aspect-[1/1.414] overflow-hidden rounded-sm bg-gray-100">
+                            <!-- 放大 2 倍 (200%) 並對齊左上角，藉此只顯示左上角的 1/4 畫面 -->
+                            <img src="${coverUrl}" class="absolute top-0 left-0 w-[201%] h-[201%] max-w-none object-cover object-left-top select-none pointer-events-none" alt="${cat.name}">
+                        </div>
+                    `;
+                    shelfDiv.appendChild(magDiv);
+                });
+                
+                rackContainer.appendChild(shelfDiv);
+            }
+        }
+
+        // --- 4. 渲染清單詳細頁 ---
         function renderTabs() {
             tabsContainer.innerHTML = '';
             equipmentData.forEach(cat => {
@@ -261,445 +262,23 @@
             const category = equipmentData.find(c => c.id === currentCategory);
             titleElement.textContent = category.name + '清單';
 
-            category.images.forEach((imgUrl, index) => {
+            category.images.forEach((imgUrl) => {
                 const imgWrap = document.createElement('div');
-                imgWrap.className = 'relative cursor-pointer bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden active:scale-[0.98] transition-transform';
+                imgWrap.className = 'relative bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden';
                 
                 const img = document.createElement('img');
-                // 🚀 核心：如果有合成好的預覽圖，就優先顯示它！這讓使用者可以直接看到自己的標記，也能透過原生長按儲存含有筆跡的圖片。
-                img.src = markedMerged[imgUrl] || imgUrl;
+                img.src = imgUrl;
                 
-                // 🚀 核心：移除 pointer-events-none，讓瀏覽器原生支援長按選單
-                img.className = 'w-full h-auto object-cover block';
-                // 強制開啟 iOS 長按選單 (針對 webkit 核心)
+                // 強制開啟 iOS/瀏覽器 長按選單，支援原生圖片儲存
+                img.className = 'w-full h-auto object-cover block select-none';
                 img.style.webkitTouchCallout = 'default';
-                
-                if (markedStates[imgUrl]) {
-                    const badge = document.createElement('div');
-                    badge.className = 'absolute top-3 left-3 bg-green-500/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10 flex items-center gap-1 border border-green-400/50 pointer-events-none';
-                    badge.innerHTML = '<i class="fas fa-check-circle"></i> 已保存';
-                    imgWrap.appendChild(badge);
-                }
-
-                if (currentCategory === 'my_uploads') {
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'absolute top-3 right-3 bg-black/40 backdrop-blur-md text-white w-8 h-8 rounded-full shadow-md z-20 flex items-center justify-center hover:bg-red-500 transition';
-                    deleteBtn.innerHTML = '<i class="fas fa-times text-sm"></i>';
-                    deleteBtn.onclick = (e) => {
-                        e.stopPropagation(); 
-                        e.preventDefault();
-                        
-                        category.images.splice(index, 1);
-                        delete markedStates[imgUrl]; 
-                        delete markedMerged[imgUrl]; // 一併清除合成圖
-                        
-                        if (category.images.length === 0) {
-                            const catIndex = equipmentData.findIndex(c => c.id === 'my_uploads');
-                            if (catIndex !== -1) equipmentData.splice(catIndex, 1);
-                            currentCategory = equipmentData[0].id;
-                            renderTabs();
-                        }
-                        renderGallery();
-                    };
-                    imgWrap.appendChild(deleteBtn);
-                }
-
-                // 點擊觸發編輯器 (忽略刪除按鈕的點擊)
-                imgWrap.onclick = (e) => {
-                    if (e.target.closest('button')) return;
-                    openEditor(imgUrl);
-                };
 
                 imgWrap.appendChild(img);
                 galleryContainer.appendChild(imgWrap);
             });
-
-            // 批次下載 UI 更新
-            const batchContainer = document.getElementById('batch-download-container');
-            const markedCountSpan = document.getElementById('marked-count');
-            const markedKeys = Object.keys(markedStates);
-            
-            if (markedKeys.length > 0) {
-                batchContainer.classList.remove('hidden');
-                batchContainer.classList.add('flex');
-                markedCountSpan.textContent = markedKeys.length;
-            } else {
-                batchContainer.classList.add('hidden');
-                batchContainer.classList.remove('flex');
-            }
         }
 
-        // --- 3. 編輯器核心邏輯 ---
-        const modal = document.getElementById('editor-modal');
-        const modalBackdrop = document.getElementById('modal-backdrop');
-        const modalContent = document.getElementById('modal-content');
-        const scrollContainer = document.getElementById('scroll-container');
-        const bgCanvas = document.getElementById('bg-canvas');
-        const bgCtx = bgCanvas.getContext('2d', { willReadFrequently: true });
-        const drawCanvas = document.getElementById('draw-canvas');
-        const drawCtx = drawCanvas.getContext('2d', { willReadFrequently: true });
-        
-        let isDrawing = false;
-        let currentColor = '#3643ba';
-        let currentSize = 5;
-        let currentTool = 'move'; 
-
-        let undoStack = [];
-        let redoStack = [];
-
-        const toolMove = document.getElementById('tool-move');
-        const toolPen = document.getElementById('tool-pen');
-        const toolEraser = document.getElementById('tool-eraser');
-        const colorBtns = document.querySelectorAll('.color-btn');
-        const sizeInput = document.getElementById('brush-size');
-        const clearBtn = document.getElementById('clear-canvas');
-        const undoBtn = document.getElementById('undo-btn');
-        const redoBtn = document.getElementById('redo-btn');
-
-        function setTool(tool) {
-            currentTool = tool;
-            
-            [toolMove, toolPen, toolEraser].forEach(btn => {
-                btn.classList.replace('bg-[#4da6ff]', 'bg-transparent');
-                btn.classList.replace('text-white', 'text-gray-400');
-                btn.classList.remove('shadow');
-            });
-
-            const activeBtn = tool === 'move' ? toolMove : (tool === 'pen' ? toolPen : toolEraser);
-            activeBtn.classList.replace('bg-transparent', 'bg-[#4da6ff]');
-            activeBtn.classList.replace('text-gray-400', 'text-white');
-            activeBtn.classList.add('shadow');
-
-            if (tool === 'move') {
-                drawCanvas.style.pointerEvents = 'none'; 
-                scrollContainer.style.overflowY = 'auto';
-            } else {
-                drawCanvas.style.pointerEvents = 'auto'; 
-                scrollContainer.style.overflowY = 'hidden'; 
-            }
-        }
-
-        toolMove.onclick = () => setTool('move');
-        toolPen.onclick = () => setTool('pen');
-        toolEraser.onclick = () => setTool('eraser');
-
-        colorBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                currentColor = e.target.dataset.color;
-                setTool('pen'); 
-                colorBtns.forEach(b => b.classList.remove('ring-2'));
-                e.target.classList.add('ring-2');
-            });
-        });
-
-        sizeInput.oninput = (e) => { currentSize = e.target.value; };
-
-        function updateUndoRedoUI() {
-            undoBtn.disabled = undoStack.length <= 1;
-            redoBtn.disabled = redoStack.length === 0;
-        }
-
-        function saveState() {
-            undoStack.push(drawCanvas.toDataURL());
-            redoStack = [];
-            updateUndoRedoUI();
-        }
-
-        function restoreState(stateUrl) {
-            const img = new Image();
-            img.onload = () => {
-                drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-                drawCtx.drawImage(img, 0, 0);
-            };
-            img.src = stateUrl;
-        }
-
-        undoBtn.onclick = () => {
-            if (undoStack.length > 1) {
-                redoStack.push(undoStack.pop());
-                restoreState(undoStack[undoStack.length - 1]);
-                updateUndoRedoUI();
-                isModified = true;
-            }
-        };
-
-        redoBtn.onclick = () => {
-            if (redoStack.length > 0) {
-                const nextState = redoStack.pop();
-                undoStack.push(nextState);
-                restoreState(nextState);
-                updateUndoRedoUI();
-                isModified = true;
-            }
-        };
-
-        function openEditor(imageSource) {
-            currentEditingUrl = imageSource;
-            isModified = false;
-            
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            
-            setTimeout(() => { 
-                modalBackdrop.classList.remove('opacity-0');
-                modalContent.classList.remove('translate-y-full');
-            }, 10);
-            
-            document.body.style.overflow = 'hidden'; 
-            
-            const img = new Image();
-            img.crossOrigin = "anonymous"; 
-            img.onload = () => {
-                bgCanvas.width = img.width;
-                bgCanvas.height = img.height;
-                drawCanvas.width = img.width;
-                drawCanvas.height = img.height;
-                
-                bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
-                drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-                
-                if (markedStates[currentEditingUrl]) {
-                    const savedStrokeImg = new Image();
-                    savedStrokeImg.onload = () => {
-                        drawCtx.drawImage(savedStrokeImg, 0, 0);
-                        undoStack = []; redoStack = []; saveState();
-                    };
-                    savedStrokeImg.src = markedStates[currentEditingUrl];
-                } else {
-                    undoStack = []; redoStack = []; saveState();
-                }
-                
-                colorBtns[0].click(); 
-            };
-            
-            img.onerror = () => {
-                alert('圖片載入失敗，請檢查網路連線。');
-                closeEditor();
-            };
-            
-            if (typeof imageSource === 'string' && imageSource.startsWith('blob:')) {
-                img.src = imageSource;
-            } else if (imageSource instanceof File) {
-                img.src = URL.createObjectURL(imageSource);
-                currentEditingUrl = img.src; 
-            } else {
-                img.src = "https://wsrv.nl/?url=" + encodeURIComponent(imageSource);
-            }
-        }
-
-        function closeEditor() {
-            if (currentEditingUrl && isModified) {
-                // 儲存筆跡供下次編輯使用
-                markedStates[currentEditingUrl] = drawCanvas.toDataURL();
-                
-                // 🚀 核心：同步產生一張「底圖+筆跡」的合成圖！供首頁顯示與長按原生下載
-                const mCanvas = document.createElement('canvas');
-                mCanvas.width = bgCanvas.width;
-                mCanvas.height = bgCanvas.height;
-                const mCtx = mCanvas.getContext('2d');
-                mCtx.drawImage(bgCanvas, 0, 0);
-                mCtx.drawImage(drawCanvas, 0, 0);
-                markedMerged[currentEditingUrl] = mCanvas.toDataURL('image/png');
-            }
-
-            modalBackdrop.classList.add('opacity-0');
-            modalContent.classList.add('translate-y-full');
-            
-            setTimeout(() => {
-                modal.classList.remove('flex');
-                modal.classList.add('hidden');
-                document.body.style.overflow = '';
-                
-                if (currentEditingUrl && isModified) {
-                    renderGallery(); 
-                }
-                currentEditingUrl = null;
-            }, 300); 
-        }
-
-        document.getElementById('cancel-edit').onclick = closeEditor;
-
-        clearBtn.onclick = () => {
-            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-            isModified = true;
-            saveState();
-        };
-
-        // --- 4. 畫布繪製 ---
-        function getCoordinates(e) {
-            const rect = drawCanvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            
-            const scaleX = drawCanvas.width / rect.width;
-            const scaleY = drawCanvas.height / rect.height;
-
-            return {
-                x: (clientX - rect.left) * scaleX,
-                y: (clientY - rect.top) * scaleY
-            };
-        }
-
-        function startDrawing(e) {
-            if (currentTool === 'move') return; 
-            e.preventDefault(); 
-            isDrawing = true;
-            const coords = getCoordinates(e);
-            
-            drawCtx.beginPath();
-            drawCtx.moveTo(coords.x, coords.y);
-            drawCtx.lineTo(coords.x, coords.y);
-            drawCtx.lineCap = 'round';
-            drawCtx.lineJoin = 'round';
-            
-            if (currentTool === 'eraser') {
-                drawCtx.globalCompositeOperation = 'destination-out';
-                drawCtx.lineWidth = currentSize * 2;
-                drawCtx.strokeStyle = 'rgba(0,0,0,1)'; 
-            } else {
-                drawCtx.globalCompositeOperation = 'source-over';
-                drawCtx.lineWidth = currentSize;
-                drawCtx.strokeStyle = currentColor;
-            }
-            drawCtx.stroke();
-        }
-
-        function draw(e) {
-            if (!isDrawing || currentTool === 'move') return;
-            e.preventDefault();
-            const coords = getCoordinates(e);
-            drawCtx.lineTo(coords.x, coords.y);
-            drawCtx.stroke();
-        }
-
-        function stopDrawing() {
-            if(isDrawing) {
-                drawCtx.closePath();
-                isDrawing = false;
-                isModified = true; 
-                saveState();
-            }
-        }
-
-        drawCanvas.addEventListener('mousedown', startDrawing);
-        drawCanvas.addEventListener('mousemove', draw);
-        drawCanvas.addEventListener('mouseup', stopDrawing);
-        drawCanvas.addEventListener('mouseout', stopDrawing);
-
-        drawCanvas.addEventListener('touchstart', startDrawing, { passive: false });
-        drawCanvas.addEventListener('touchmove', draw, { passive: false });
-        drawCanvas.addEventListener('touchend', stopDrawing);
-        drawCanvas.addEventListener('touchcancel', stopDrawing);
-
-        // --- 5. 儲存與上傳邏輯 ---
-        
-        document.getElementById('save-image').onclick = () => {
-            isModified = true; 
-            const mergedCanvas = document.createElement('canvas');
-            mergedCanvas.width = bgCanvas.width;
-            mergedCanvas.height = bgCanvas.height;
-            const mCtx = mergedCanvas.getContext('2d');
-            
-            mCtx.drawImage(bgCanvas, 0, 0);
-            mCtx.drawImage(drawCanvas, 0, 0);
-
-            const dataURL = mergedCanvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.download = `標記_${document.getElementById('current-category-title').textContent}_${new Date().getTime()}.png`;
-            link.href = dataURL;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            const saveBtn = document.getElementById('save-image');
-            saveBtn.innerHTML = '<i class="fas fa-check"></i> 已下載';
-            saveBtn.classList.replace('bg-[#4da6ff]', 'bg-green-500');
-            
-            setTimeout(() => {
-                saveBtn.innerHTML = '下載 <i class="fas fa-download text-xs"></i>';
-                saveBtn.classList.replace('bg-green-500', 'bg-[#4da6ff]');
-                closeEditor(); 
-            }, 1500);
-        };
-
-        // 🚀 修改：打包下載按鈕現在直接運用剛剛生成的 markedMerged，速度超級快！
-        document.getElementById('download-all-btn').onclick = async () => {
-            const urls = Object.keys(markedMerged);
-            if(urls.length === 0) return;
-
-            const btn = document.getElementById('download-all-btn');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 處理中...';
-            btn.disabled = true;
-
-            for (let i = 0; i < urls.length; i++) {
-                const url = urls[i];
-                const mergedDataUrl = markedMerged[url];
-                
-                let catName = '裝備清單';
-                equipmentData.forEach(c => { if(c.images.includes(url)) catName = c.name; });
-                
-                if (mergedDataUrl) {
-                    const link = document.createElement('a');
-                    link.download = `${catName}_第${i+1}份_${new Date().getTime()}.png`;
-                    link.href = mergedDataUrl;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-                await new Promise(r => setTimeout(r, 500)); 
-            }
-
-            btn.innerHTML = '<i class="fas fa-check"></i> 下載完成';
-            btn.classList.replace('bg-[#3643ba]', 'bg-green-500');
-            setTimeout(() => {
-                btn.innerHTML = originalHtml;
-                btn.classList.replace('bg-green-500', 'bg-[#3643ba]');
-                btn.disabled = false;
-            }, 2000);
-        };
-
-        const handleUpload = function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (!file.type.match('image.*')) {
-                alert('請上傳圖片檔案');
-                return;
-            }
-            
-            const blobUrl = URL.createObjectURL(file);
-            
-            let uploadCat = equipmentData.find(c => c.id === 'my_uploads');
-            if (!uploadCat) {
-                uploadCat = { id: 'my_uploads', name: '我的上傳', images: [] };
-                equipmentData.push(uploadCat); 
-            }
-            
-            if(!uploadCat.images.includes(blobUrl)) {
-                uploadCat.images.push(blobUrl);
-            }
-            
-            currentCategory = 'my_uploads';
-            renderTabs();
-            renderGallery();
-            
-            openEditor(blobUrl);
-            this.value = ''; 
-        };
-
-        document.getElementById('upload-resume-mobile').addEventListener('change', handleUpload);
-
-        // 🚀 新增：防止使用者誤觸重新整理或關閉網頁 (系統防護)
-        window.addEventListener('beforeunload', function (e) {
-            // 只要有任何標記紀錄，或者目前編輯器有未存檔的筆跡，就觸發瀏覽器警告
-            if (Object.keys(markedStates).length > 0 || isModified) {
-                // 顯示瀏覽器內建的離開警告對話框
-                e.preventDefault();
-                e.returnValue = ''; 
-            }
-        });
-
-        // 💡 新增：資訊彈窗邏輯
+        // --- 5. 資訊彈窗邏輯 ---
         const infoModal = document.getElementById('info-modal');
         const infoBackdrop = document.getElementById('info-backdrop');
         const infoContent = document.getElementById('info-content');
@@ -709,7 +288,6 @@
         function openInfoModal() {
             infoModal.classList.remove('hidden');
             infoModal.classList.add('flex');
-            // 強制重繪以觸發流暢動畫
             void infoModal.offsetWidth; 
             infoBackdrop.classList.remove('opacity-0');
             infoContent.classList.remove('scale-95', 'opacity-0');
@@ -729,9 +307,9 @@
         showInfoBtn.onclick = openInfoModal;
         closeInfoBtn.onclick = closeInfoModal;
 
-        // 初始化
-        renderTabs();
-        renderGallery();
+        // --- 初始化 ---
+        renderRack(); // 渲染雜誌架
+        showHome();   // 確保初始狀態顯示首頁
 
         // 網頁載入後，延遲 0.5 秒自動彈出提示框
         setTimeout(openInfoModal, 500);
